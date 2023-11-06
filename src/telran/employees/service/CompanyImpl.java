@@ -20,6 +20,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.TreeMap;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantReadWriteLock;
 import java.util.stream.Collector;
 import java.util.stream.Collectors;
 
@@ -32,17 +34,25 @@ LinkedHashMap<Long, Employee> employees = new LinkedHashMap<>();
 TreeMap<Integer, Collection<Employee>> employeeSalary = new TreeMap<>();
 HashMap<String, Collection<Employee>> employeeDep = new HashMap<>();
 TreeMap<LocalDate, Collection<Employee>> employeeAge = new TreeMap<>();
+ReentrantReadWriteLock readWriteLock = new ReentrantReadWriteLock();
+Lock readLock = readWriteLock.readLock();
+Lock writeLock = readWriteLock.writeLock();
 	@Override
 	public boolean addEmployee(Employee empl) {
-		boolean res = false;
-		Employee emplRes = employees.putIfAbsent(empl.id(), empl);
-		if(emplRes == null) {
-			res = true;
-			addEmployeeSalary(empl);
-			addEmployeeDepartment(empl);
-			addEmployeeAge(empl);
+		try {
+			writeLock.lock();
+			boolean res = false;
+			Employee emplRes = employees.putIfAbsent(empl.id(), empl);
+			if (emplRes == null) {
+				res = true;
+				addEmployeeSalary(empl);
+				addEmployeeDepartment(empl);
+				addEmployeeAge(empl);
+			}
+			return res;
+		} finally {
+			writeLock.unlock();
 		}
-		return res;
 	}
 	private <T> void addToIndex(Employee empl, T key, Map<T, Collection<Employee>> map) {
 		map.computeIfAbsent(key, k -> new HashSet<>()).add(empl);
@@ -68,13 +78,18 @@ TreeMap<LocalDate, Collection<Employee>> employeeAge = new TreeMap<>();
 
 	@Override
 	public Employee removeEmployee(long id) {
-		Employee res = employees.remove(id);
-		if(res != null) {
-			removeEmployeeSalary(res);
-			removeEmployeeDep(res);
-			removeEmployeeAge(res);
+		try {
+			writeLock.lock();
+			Employee res = employees.remove(id);
+			if (res != null) {
+				removeEmployeeSalary(res);
+				removeEmployeeDep(res);
+				removeEmployeeAge(res);
+			}
+			return res;
+		} finally {
+			writeLock.unlock();
 		}
-		return res;
 	}
 
 	private void removeEmployeeAge(Employee empl) {
@@ -109,12 +124,23 @@ TreeMap<LocalDate, Collection<Employee>> employeeAge = new TreeMap<>();
 
 	@Override
 	public Employee getEmployee(long id) {
-		return employees.get(id);
+		try {
+			readLock.lock();
+			return employees.get(id);
+		} finally {
+			readLock.unlock();
+		}
 	}
 
 	@Override
 	public List<Employee> getEmployees() {
-		return new ArrayList<>(employees.values());
+		try {
+			readLock.lock();
+			return new ArrayList<>(employees.values());
+		} finally {
+			readLock.unlock();
+		}
+		
 	}
 
 	@Override
