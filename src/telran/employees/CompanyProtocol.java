@@ -2,6 +2,8 @@ package telran.employees;
 
 import java.io.Serial;
 import java.io.Serializable;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.Arrays;
 
@@ -10,7 +12,7 @@ import telran.employees.service.*;
 import telran.net.*;
 
 public class CompanyProtocol implements ApplProtocol {
-private Company company;
+	private Company company;
 public CompanyProtocol(Company company) {
 	this.company = company;
 }
@@ -21,24 +23,22 @@ public CompanyProtocol(Company company) {
 		String requestType = request.requestType();
 		Serializable data = request.requestData();
 		try {
-			Serializable responseData = switch(requestType) {
-			case "employee/add" -> employee_add(data);
-			case "employee/remove" -> employee_remove(data);
-			case "employee/get" -> employee_get(data);
-			case "employees/department" -> employees_department(data);
-			case "employees/salary" -> employees_salary(data);
-			case "employees/age" -> employees_age(data);
-			case "employees/get" -> employees_get(data);
-			case "department/update" -> department_update(data);
-			case "salary/update" -> salary_update(data);
-			case "department/salary/distribution" -> department_salary_distribution(data);
-			case "salary/distribution" -> salary_distribution(data);
-			default -> new Response(ResponseCode.WRONG_TYPE, requestType +
+			requestType = requestType.replace("/", "_");
+			Method method = this.getClass().getDeclaredMethod(requestType, Serializable.class);
+			Serializable responseData = (Serializable) method.invoke(this, data);
+			response = new Response(ResponseCode.OK, responseData);
+		}catch(NoSuchMethodException e) {
+			response = new Response(ResponseCode.WRONG_TYPE, requestType +
 		    		" is unsupported in the Company Protocol");
-			};
-			response = (responseData instanceof Response) ? (Response) responseData : 
-				new Response(ResponseCode.OK, responseData);
-		}catch (Exception e) {
+		}
+		catch (InvocationTargetException e) {
+			Throwable ce = e.getCause();
+			String errorMessage = ce instanceof ClassCastException ?
+					"Mismatching of received data type" : ce.getMessage();
+			
+			response = new Response(ResponseCode.WRONG_DATA, errorMessage);
+		}
+		catch (Exception e) {
 			response = new Response(ResponseCode.WRONG_DATA, e.toString());
 		}
 		return response;
